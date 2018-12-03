@@ -1,0 +1,6 @@
+@page "/"
+@inherits IndexModel
+
+<h1>A*</h1>
+
+<Board Height="@Height" Width="@Width" Resolver="@AStarAsync" ref="@Board" />

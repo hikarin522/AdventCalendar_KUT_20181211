@@ -1,0 +1,174 @@
+@using System.Linq
+
+<div>
+    <button type="button" disabled="@isProcessing" class="btn btn-outline-primary @(cuBtn == FieldFlag.Start ? "active" : null)" onclick="@(_ => cuBtn = FieldFlag.Start)">スタート地点</button>
+    <button type="button" disabled="@isProcessing" class="btn btn-outline-secondary @(cuBtn == FieldFlag.Wall ? "active" : null)" onclick="@(_ => cuBtn = FieldFlag.Wall)">壁</button>
+    <button type="button" disabled="@isProcessing" class="btn btn-outline-danger @(cuBtn == FieldFlag.Goal ? "active" : null)" onclick="@(_ => cuBtn = FieldFlag.Goal)">ゴール</button>
+    <button type="button" disabled="@isProcessing" class="btn btn-outline-warning" onclick="@(_ => Reset())">Reset</button>
+    <button type="button" disabled="@isProcessing" class="btn btn-outline-success @(isProcessing ? "active" : null)" onclick="@onStartAsync">Start</button>
+</div>
+
+<table class="board">
+    <tbody>
+        @for (var y = 0; y < Height; ++y)
+        {
+            <tr>
+                @for (var x = 0; x < Width; ++x)
+                {
+                    <td class="board"><span style="@(!string.IsNullOrEmpty(getColor(x, y)) ? "background:" + getColor(x, y) + ";" : null)" onclick="@getClickAction(x, y)" /></td>
+                }
+            </tr>
+        }
+    </tbody>
+</table>
+
+@functions {
+    [Parameter]
+    int Height { get; set; }
+
+    [Parameter]
+    int Width { get; set; }
+
+    public FieldFlag[,] Field { get; private set; }
+
+    private bool isDirty { get; set; }
+    private bool isProcessing { get; set; }
+
+    private FieldFlag cuBtn { get; set; }
+
+    public (int x, int y) StartPos { get; private set; }
+
+    public (int x, int y) GoalPos { get; private set; }
+
+    private Action<UIMouseEventArgs> getClickAction(int x, int y)
+    {
+        return e => onClick(e, x, y);
+    }
+
+    [Parameter]
+    Func<Task> Resolver { get; set; }
+
+    private async void onStartAsync()
+    {
+        isDirty = true;
+        isProcessing = true;
+        StateHasChanged();
+        await Resolver();
+        isProcessing = false;
+        StateHasChanged();
+    }
+
+    public void ReRender()
+    {
+        StateHasChanged();
+    }
+
+    protected override void OnInit()
+    {
+        Field = new FieldFlag[Height, Width];
+        Reset();
+    }
+
+    public void Reset()
+    {
+        isDirty = false;
+        isProcessing = false;
+
+        for (var y = 0; y < Height; ++y)
+            for (var x = 0; x < Width; ++x)
+                Field[y, x] = FieldFlag.None;
+
+        StartPos = (0, 0);
+        Field[StartPos.y, StartPos.x] = FieldFlag.Start;
+
+        GoalPos = (Width - 1, Height - 1);
+        Field[GoalPos.y, GoalPos.x] = FieldFlag.Goal;
+    }
+
+    public void Clear()
+    {
+        isDirty = false;
+        for (var y = 0; y < Height; ++y)
+            for (var x = 0; x < Width; ++x)
+                switch (Field[y, x])
+                {
+                    case FieldFlag.None:
+                    case FieldFlag.Start:
+                    case FieldFlag.Goal:
+                    case FieldFlag.Wall:
+                        break;
+                    default:
+                        Field[y, x] = FieldFlag.None;
+                        break;
+                }
+    }
+
+    private void onClick(UIMouseEventArgs ev, int x, int y)
+    {
+        if (isProcessing) return;
+
+        var pos = (x, y);
+        switch (cuBtn)
+        {
+            case FieldFlag.Start when pos != GoalPos:
+            {
+                Field[StartPos.y, StartPos.x] = FieldFlag.None;
+                StartPos = pos;
+                Field[StartPos.y, StartPos.x] = FieldFlag.Start;
+                if (isDirty) Clear();
+                break;
+            }
+            case FieldFlag.Goal when pos != StartPos:
+            {
+                Field[GoalPos.y, GoalPos.x] = FieldFlag.None;
+                GoalPos = pos;
+                Field[GoalPos.y, GoalPos.x] = FieldFlag.Goal;
+                if (isDirty) Clear();
+                break;
+            }
+            case FieldFlag.Wall when pos != StartPos && pos != GoalPos:
+            {
+                if (Field[y, x] == FieldFlag.None)
+                {
+                    Field[y, x] = FieldFlag.Wall;
+                }
+                else if (Field[y, x] == FieldFlag.Wall)
+                {
+                    Field[y, x] = FieldFlag.None;
+                }
+                if (isDirty) Clear();
+                break;
+            }
+        }
+        Console.WriteLine($"x: {x}, y: {y}");
+    }
+
+    public enum FieldFlag
+    {
+        None,
+        Start,
+        Goal,
+        Wall,
+        Open,
+        Path,
+    }
+
+    private string getColor(int x, int y)
+    {
+        switch (Field[y, x])
+        {
+            case FieldFlag.Start:
+                return "blue";
+            case FieldFlag.Goal:
+                return "red";
+            case FieldFlag.Wall:
+                return "black";
+            case FieldFlag.Open:
+                return "silver";
+            case FieldFlag.Path:
+                return "pink";
+            default:
+                return null;
+        }
+    }
+}

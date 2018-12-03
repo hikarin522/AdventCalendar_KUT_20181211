@@ -1,0 +1,32 @@
+@inject IUriHelper UriHelper
+
+<div class="top-row pl-4 navbar navbar-dark">
+    <a class="navbar-brand" href=@UriHelper.GetBaseUri()>最良優先探索</a>
+    <button class="navbar-toggler" onclick=@ToggleNavMenu>
+        <span class="navbar-toggler-icon"></span>
+    </button>
+</div>
+
+<div class=@(collapseNavMenu ? "collapse" : null) onclick=@ToggleNavMenu>
+    <ul class="nav flex-column">
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href=@UriHelper.GetBaseUri() Match=NavLinkMatch.All>
+                <span class="oi oi-graph" aria-hidden="true"></span> A*
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="breadth">
+                <span class="oi oi-graph" aria-hidden="true"></span> 幅優先探索
+            </NavLink>
+        </li>
+    </ul>
+</div>
+
+@functions {
+    bool collapseNavMenu = true;
+
+    void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}
