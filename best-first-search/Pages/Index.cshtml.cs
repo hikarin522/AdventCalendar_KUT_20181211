@@ -1,12 +1,9 @@
-using Microsoft.AspNetCore.Blazor.Components;
-using Microsoft.AspNetCore.Blazor;
-using Microsoft.AspNetCore.Blazor.Services;
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Collections.Generic;
-using best_first_search.Shared;
 using System.Linq;
+using System.Threading.Tasks;
+using best_first_search.Shared;
+using Microsoft.AspNetCore.Blazor.Components;
 
 namespace best_first_search.Pages
 {
@@ -23,44 +20,44 @@ namespace best_first_search.Pages
         public async Task AStarAsync()
         {
             // スタート地点追加
-            var queue = new List<(double d, int x, int y)> {
-                { (this.getDistanceToGoal(this.Board.StartPos.x, this.Board.StartPos.y), this.Board.StartPos.x, this.Board.StartPos.y) }
+            var queue = new PriorityQueue<double, (int x, int y)> {
+                { this.getDistanceToGoal(this.Board.StartPos.x, this.Board.StartPos.y), (this.Board.StartPos.x, this.Board.StartPos.y) }
             };
 
             // スタート地点からの距離と親
-            var costs = new (int d, Parent p)[Height, Width];
+            var distanceTable = new int[Height, Width];
+            var parentTable = new Parent[Height, Width];
 
             while (queue.Count > 0)
             {
-                var val = queue[0];
-                var pos = (val.x, val.y);
-                queue.RemoveAt(0);
+                var (val, (x, y)) = queue.Pop();
 
-                if (this.getFieldFlg(pos.x, pos.y) == FieldFlag.Goal)
-                    break;
-
-                void enqueue(int x, int y, Parent parent)
+                if (this.getFieldFlg(x, y) == FieldFlag.Goal)
                 {
-                    var flg = this.getFieldFlg(x, y);
+                    break;
+                }
+
+                void enqueue(int _x, int _y, Parent parent)
+                {
+                    var flg = this.getFieldFlg(_x, _y);
                     switch (flg)
                     {
                         case FieldFlag.None:
                         case FieldFlag.Open:
                         case FieldFlag.Goal:
                         {
-                            var cost = costs[pos.y, pos.x].d;
+                            var distance = distanceTable[y, x] + 1;
                             // 新規 or コスト小さくなる場合に更新
-                            if (costs[y, x].p == Parent.None || (costs[y, x].p != parent && cost < costs[y, x].d))
+                            if (parentTable[_y, _x] == Parent.None || distance < distanceTable[_y, _x])
                             {
-                                costs[y, x] = (cost + 1, parent);
-
-                                // 昇順ソートでインサート
-                                var dist = costs[y, x].d + this.getDistanceToGoal(x, y);
-                                var i = queue.FindIndex(e => e.d >= dist);
-                                queue.Insert(i < 0 ? queue.Count : i, (dist, x, y));
+                                distanceTable[_y, _x] = distance;
+                                parentTable[_y, _x] = parent;
+                                queue.Push(distance + this.getDistanceToGoal(_x, _y), (_x, _y));
 
                                 if (flg == FieldFlag.None)
-                                    this.Board.Field[y, x] = FieldFlag.Open;
+                                {
+                                    this.Board.Field[_y, _x] = FieldFlag.Open;
+                                }
                             }
 
                             break;
@@ -69,43 +66,42 @@ namespace best_first_search.Pages
                 }
 
                 // ↑
-                enqueue(pos.x, pos.y - 1, Parent.Down);
+                enqueue(x, y - 1, Parent.Down);
 
                 // →
-                enqueue(pos.x + 1, pos.y, Parent.Left);
+                enqueue(x + 1, y, Parent.Left);
 
                 // ↓
-                enqueue(pos.x, pos.y + 1, Parent.Up);
+                enqueue(x, y + 1, Parent.Up);
 
                 // ←
-                enqueue(pos.x - 1, pos.y, Parent.Right);
+                enqueue(x - 1, y, Parent.Right);
 
                 this.Board.ReRender();
                 await Task.Delay(100);
             }
 
-            for (var pos = this.Board.GoalPos; pos != this.Board.StartPos;)
+            (int x, int y) parentPos((int x, int y) pos)
             {
-                if (pos != this.Board.GoalPos)
-                    this.Board.Field[pos.y, pos.x] = FieldFlag.Path;
-
-                switch (costs[pos.y, pos.x].p)
+                var (x, y) = pos;
+                switch (parentTable[y, x])
                 {
                     case Parent.Up:
-                        pos = (pos.x, pos.y - 1);
-                        break;
+                        return (x, y - 1);
                     case Parent.Down:
-                        pos = (pos.x, pos.y + 1);
-                        break;
+                        return (x, y + 1);
                     case Parent.Left:
-                        pos = (pos.x - 1, pos.y);
-                        break;
+                        return (x - 1, y);
                     case Parent.Right:
-                        pos = (pos.x + 1, pos.y);
-                        break;
+                        return (x + 1, y);
                     default:
-                        return;
+                        return (x, y);
                 }
+            }
+
+            for (var pos = parentPos(this.Board.GoalPos); pos != this.Board.StartPos; pos = parentPos(pos))
+            {
+                this.Board.Field[pos.y, pos.x] = FieldFlag.Path;
             }
         }
 
@@ -128,13 +124,68 @@ namespace best_first_search.Pages
             return this.Board.Field[y, x];
         }
 
-        enum Parent
+        private enum Parent
         {
             None,
             Up,
             Down,
             Left,
             Right,
+        }
+    }
+
+    internal class PriorityQueue<TKey, TValue>: SortedDictionary<TKey, Stack<TValue>>
+    {
+        public PriorityQueue()
+            : base() { }
+
+        public PriorityQueue(IComparer<TKey> comparer)
+            : base(comparer) { }
+
+        public void Add(TKey key, TValue value)
+        {
+            this.Push(key, value);
+        }
+
+        private readonly Stack<Stack<TValue>> cache = new Stack<Stack<TValue>>();
+
+        public void Push(TKey key, TValue value)
+        {
+            if (!this.TryGetValue(key, out var stack))
+            {
+                stack = this.cache.Count != 0 ? this.cache.Pop() : new Stack<TValue>();
+                this.Add(key, stack);
+            }
+            stack.Push(value);
+        }
+
+        public KeyValuePair<TKey, TValue> Pop()
+        {
+            var (key, stack) = this.First();
+
+            var value = stack.Pop();
+            if (stack.Count == 0)
+            {
+                this.Remove(key);
+                this.cache.Push(stack);
+            }
+
+            return new KeyValuePair<TKey, TValue>(key, value);
+        }
+
+        public KeyValuePair<TKey, TValue> Peek()
+        {
+            var (key, stack) = this.First();
+            return new KeyValuePair<TKey, TValue>(key, stack.Peek());
+        }
+    }
+
+    internal static class Extensions
+    {
+        public static void Deconstruct<T, U>(this KeyValuePair<T, U> pair, out T key, out U value)
+        {
+            key = pair.Key;
+            value = pair.Value;
         }
     }
 }
