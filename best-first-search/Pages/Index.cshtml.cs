@@ -28,12 +28,34 @@ namespace best_first_search.Pages
             var distanceTable = new int[Height, Width];
             var parentTable = new Parent[Height, Width];
 
+            (int x, int y) getParentPos((int x, int y) pos)
+            {
+                var (x, y) = pos;
+                switch (parentTable[y, x])
+                {
+                    case Parent.Up:
+                        return (x, y - 1);
+                    case Parent.Down:
+                        return (x, y + 1);
+                    case Parent.Left:
+                        return (x - 1, y);
+                    case Parent.Right:
+                        return (x + 1, y);
+                    default:
+                        return (x, y);
+                }
+            }
+
             while (queue.Count > 0)
             {
                 var (val, (x, y)) = queue.Pop();
 
                 if (this.getFieldFlg(x, y) == FieldFlag.Goal)
                 {
+                    for (var pos = getParentPos((x, y)); pos != this.Board.StartPos; pos = getParentPos(pos))
+                    {
+                        this.Board.Field[pos.y, pos.x] = FieldFlag.Path;
+                    }
                     break;
                 }
 
@@ -77,31 +99,20 @@ namespace best_first_search.Pages
                 // ←
                 enqueue(x - 1, y, Parent.Right);
 
+                // 途中経過を塗る
+                for (var pos = (x, y); pos != this.Board.StartPos; pos = getParentPos(pos))
+                {
+                    this.Board.Field[pos.y, pos.x] = FieldFlag.Path;
+                }
+
                 this.Board.ReRender();
                 await Task.Delay(100);
-            }
 
-            (int x, int y) parentPos((int x, int y) pos)
-            {
-                var (x, y) = pos;
-                switch (parentTable[y, x])
+                // 元に戻す
+                for (var pos = (x, y); pos != this.Board.StartPos; pos = getParentPos(pos))
                 {
-                    case Parent.Up:
-                        return (x, y - 1);
-                    case Parent.Down:
-                        return (x, y + 1);
-                    case Parent.Left:
-                        return (x - 1, y);
-                    case Parent.Right:
-                        return (x + 1, y);
-                    default:
-                        return (x, y);
+                    this.Board.Field[pos.y, pos.x] = FieldFlag.Open;
                 }
-            }
-
-            for (var pos = parentPos(this.Board.GoalPos); pos != this.Board.StartPos; pos = parentPos(pos))
-            {
-                this.Board.Field[pos.y, pos.x] = FieldFlag.Path;
             }
         }
 
